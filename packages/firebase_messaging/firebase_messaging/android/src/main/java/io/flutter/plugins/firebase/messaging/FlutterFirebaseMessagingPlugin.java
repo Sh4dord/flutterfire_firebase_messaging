@@ -11,18 +11,27 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import android.os.Bundle;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.Observer;
+
 import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.TaskCompletionSource;
 import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.RemoteMessage;
+
+import java.io.Serializable;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
+
 import io.flutter.embedding.engine.FlutterShellArgs;
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.embedding.engine.plugins.activity.ActivityAware;
@@ -34,9 +43,6 @@ import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 import io.flutter.plugin.common.PluginRegistry.NewIntentListener;
 import io.flutter.plugins.firebase.core.FlutterFirebasePlugin;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
 
 /** FlutterFirebaseMessagingPlugin */
 public class FlutterFirebaseMessagingPlugin
@@ -546,6 +552,16 @@ public class FlutterFirebaseMessagingPlugin
     // Remote Message ID can be either one of the following...
     String messageId = intent.getExtras().getString("google.message_id");
     if (messageId == null) messageId = intent.getExtras().getString("message_id");
+
+    // Check if notification has been sent by FlutterCallKitIncoming ?
+    Bundle call = intent.getExtras().getBundle("EXTRA_CALLKIT_CALL_DATA");
+    if(call != null) {
+      Serializable s = call.getSerializable("EXTRA_CALLKIT_EXTRA");
+      if(s instanceof HashMap) {
+        HashMap<String, String> data = (HashMap<String, String>) s;
+        messageId = data.get("message_id");
+      }
+    }
     if (messageId == null) {
       return false;
     }
