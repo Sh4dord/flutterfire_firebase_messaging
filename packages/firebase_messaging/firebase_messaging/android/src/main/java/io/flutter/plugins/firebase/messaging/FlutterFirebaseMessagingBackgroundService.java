@@ -126,18 +126,29 @@ public class FlutterFirebaseMessagingBackgroundService extends JobIntentService 
       return;
     }
 
-    // If we're in the middle of processing queued messages, add the incoming
-    // intent to the queue and return.
-    synchronized (messagingQueue) {
-      if (flutterBackgroundExecutor.isNotRunning()) {
-        Log.i(TAG, "Service has not yet started, messages will be queued.");
-        messagingQueue.add(intent);
+    // Block this worker thread until the Dart executor is ready.
+    // Returning early here (the previous queue-and-return approach) caused the JobScheduler
+    // to consider the work done and allowed Android to kill the process before the Dart
+    // isolate had time to initialise and process the message — the first background
+    // notification was silently lost as a result.
+    // By blocking the worker thread we keep the service (and process) alive, matching the
+    // behaviour of the latch used below for messages that arrive after the executor is ready.
+    final long waitStartMs = System.currentTimeMillis();
+    while (flutterBackgroundExecutor.isNotRunning()) {
+      if (System.currentTimeMillis() - waitStartMs > 30_000) {
+        Log.w(TAG, "Timed out waiting for Dart executor to initialise — message dropped.");
+        return;
+      }
+      try {
+        Thread.sleep(200);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
         return;
       }
     }
 
-    // There were no pre-existing callback requests. Execute the callback
-    // specified by the incoming intent.
+    // Execute the callback with a latch so the worker thread (and therefore the process)
+    // stays alive until the Dart handler completes.
     final CountDownLatch latch = new CountDownLatch(1);
     new Handler(getMainLooper())
         .post(
